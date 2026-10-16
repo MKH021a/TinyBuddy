@@ -437,6 +437,8 @@ async function initTune() {
   });
   $("#tunePreview").innerHTML = TUNE_EXPRS.map((e) => `<div><div class="bezel"><canvas data-expr="${e}"></canvas></div><div class="lab">${e === "rest" ? "resting" : EXPR_LABEL(e)}</div></div>`).join("");
   $("#tuneReset").onclick = () => { S.tune.sets = {}; buildTuneParams(); renderTune(); };
+  $("#tuneApprove").onclick = () =>
+    confirmCanonical(S.tune.face, "", Object.entries(S.tune.sets).map(([k, v]) => `${S.tune.face}:${k}=${v}`));
   buildTuneParams();
   renderTune();
 }

@@ -193,7 +193,15 @@ class Handler(SimpleHTTPRequestHandler):
             out.mkdir()
             info = json.loads(tbsim("info"))
             for e in ["rest"] + info["expressions"]:
-                tbsim("lab", str(out / f"{e}.pgm"), face, e, sets=sets)
+                pgm = out / f"{e}.pgm"
+                tbsim("lab", str(pgm), face, e, sets=sets)
+                try:  # PNGs when Pillow is available; the PGMs are lossless either way
+                    from PIL import Image
+                    im = Image.open(pgm)
+                    im.save(out / f"{e}.png")
+                    im.resize((512, 256), Image.NEAREST).save(out / f"{e}_x4.png")
+                except Exception:
+                    pass
             data = load_reviews()
             data["current"][face] = {"verdict": "approved", "note": note, "at": stamp, "canonical": True}
             data["history"].append({"face": face, "verdict": "canonical", "note": note, "at": stamp})
