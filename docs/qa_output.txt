@@ -1,0 +1,92 @@
+PASS  catalog integrity
+      1 animation(s) registered, all keys ordered and inside duration
+PASS  catalog size (milestone 1 = 1 of 80 planned)
+      1/80 implemented
+PASS  #80 TinyBuddy Signature Finale face A: ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face A: eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face A: no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 713 px
+PASS  #80 TinyBuddy Signature Finale face A (mirrored): ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face A (mirrored): eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face A (mirrored): no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 714 px
+PASS  #80 TinyBuddy Signature Finale face B: ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face B: eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face B: no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 854 px
+PASS  #80 TinyBuddy Signature Finale face B (mirrored): ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face B (mirrored): eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face B (mirrored): no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 851 px
+PASS  #80 TinyBuddy Signature Finale face C: ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face C: eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face C: no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 1196 px
+PASS  #80 TinyBuddy Signature Finale face C (mirrored): ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face C (mirrored): eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face C (mirrored): no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 1196 px
+PASS  #80 TinyBuddy Signature Finale face D: ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face D: eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face D: no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 591 px
+PASS  #80 TinyBuddy Signature Finale face D (mirrored): ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face D (mirrored): eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face D (mirrored): no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 587 px
+PASS  #80 TinyBuddy Signature Finale face E: ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face E: eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face E: no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 687 px
+PASS  #80 TinyBuddy Signature Finale face E (mirrored): ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face E (mirrored): eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face E (mirrored): no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 687 px
+PASS  #80 TinyBuddy Signature Finale face F: ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face F: eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face F: no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 860 px
+PASS  #80 TinyBuddy Signature Finale face F (mirrored): ends on resting face, no leftover effects
+      0 px differ, 0 effects at end
+PASS  #80 TinyBuddy Signature Finale face F (mirrored): eyes stay on screen horizontally
+      max eye-box overflow 0.00 px
+PASS  #80 TinyBuddy Signature Finale face F (mirrored): no stray pixels / edge clipping
+      max isolated lit px 1, max lit px on screen border 0, 363 frames, max frame-to-frame change 860 px
+PASS  determinism: same seed -> identical 20 s reel
+      hash feb07479 vs feb07479
+PASS  variation: different seed -> different reel
+      hash feb07479 vs a295c22b
+PASS  millis() rollover: reel across the 32-bit wrap is identical
+      hash feb07479 vs feb07479
+PASS  interruption: stop mid-animation clears effects and recovers to idle
+      stopped during blink, look, POP (hearts), bounce, wink
+PASS  autonomous mode: plays on its own with idle gaps
+      5 plays in 90 s (expect ~4-6 with 9-16 s idle gaps)
+PASS  style parameter reflection (set/get/reject)
+      floats, enums, groups, rejects bad input
+PASS  host render cost (informational; device timing measured on hardware)
+      8.2 us per frame (evaluate + render) over 3520 frames on this Mac
+
+45 checks, 0 failed

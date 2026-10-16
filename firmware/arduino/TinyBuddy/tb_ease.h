@@ -31,9 +31,9 @@ inline float ease(Ease e, float t) {
     case Ease::Linear: return t;
     case Ease::InQuad: return t * t;
     case Ease::OutQuad: return 1.f - (1.f - t) * (1.f - t);
-    case Ease::InOutQuad: return t < 0.5f ? 2.f * t * t : 1.f - 2.f * sq(1.f - t);
+    case Ease::InOutQuad: return t < 0.5f ? 2.f * t * t : 1.f - 2.f * sqf(1.f - t);
     case Ease::OutCubic: { float u = 1.f - t; return 1.f - u * u * u; }
-    case Ease::InOutCubic: return t < 0.5f ? 4.f * t * t * t : 1.f - 4.f * sq(1.f - t) * (1.f - t);
+    case Ease::InOutCubic: return t < 0.5f ? 4.f * t * t * t : 1.f - 4.f * sqf(1.f - t) * (1.f - t);
     case Ease::OutQuart: { float u = 1.f - t; return 1.f - u * u * u * u; }
     case Ease::InOutSine: return 0.5f - 0.5f * cosf(kPi * t);
     case Ease::OutBack: { const float c = 1.70158f * 0.6f; float u = t - 1.f; return 1.f + u * u * ((c + 1.f) * u + c); }

@@ -18,7 +18,7 @@ inline int imin(int a, int b) { return a < b ? a : b; }
 inline int imax(int a, int b) { return a > b ? a : b; }
 inline float fminf2(float a, float b) { return a < b ? a : b; }
 inline float fmaxf2(float a, float b) { return a > b ? a : b; }
-inline float sq(float v) { return v * v; }
+inline float sqf(float v) { return v * v; }
 
 // Pixel (x) has its centre at x + 0.5. These convert a continuous interval [lo, hi]
 // into the inclusive range of pixel indices whose centres fall inside it.
