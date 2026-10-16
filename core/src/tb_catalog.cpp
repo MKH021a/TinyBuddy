@@ -110,8 +110,7 @@ const Key kFinaleKeys[] = {
   // lean in ... and WINK (right eye), with a cheeky tongue and a little hop
   ABS(3950, 220, FaceX, InOutQuad, 2.f),
   ABS(3950, 220, GazeX, InOutQuad, -0.12f),
-  ABS(4170, 80, OpenR, OutQuad, 0.1f),               // lid snaps shut first ...
-  ABS(4170, 120, HappyR, InQuad, 1.f),               // ... then the cheek lifts it into "^"
+  ABS(4170, 80, OpenR, OutQuad, 0.f),                // the lid snaps shut first ...
   ABS(4170, 120, OpenL, OutQuad, 1.f),
   ABS(4170, 120, HappyL, OutQuad, 0.3f),
   ABS(4170, 140, MouthAsym, OutBack, -1.4f),
@@ -119,16 +118,18 @@ const Key kFinaleKeys[] = {
   ABS(4170, 140, MouthOpen, OutBack, 0.38f),
   ABS(4170, 140, MouthTongue, OutBack, 1.f),
   ADD(4170, 120, FaceY, OutQuad, -1.f),
+  ABS(4240, 110, HappyR, InOutQuad, 1.f),            // ... then the closed line bends into "^"
+  ABS(4240, 110, OpenR, InOutQuad, 0.12f),
   BAS(4290, 200, FaceY, OutBack),
 
-  // unwink
-  ABS(4850, 110, HappyR, OutQuad, 0.3f),            // cheek drops first, then the lid opens
-  ABS(4850, 190, OpenR, InOutCubic, 1.f),
+  // unwink: the "^" flattens back into a closed line, then the eye opens
+  ABS(4850, 70, OpenR, InQuad, 0.f),
   ABS(4850, 170, MouthTongue, InOutQuad, 0.f),
   ABS(4850, 170, MouthOpen, InOutQuad, 0.f),
+  ABS(4900, 100, HappyR, InOutQuad, 0.3f),
+  ABS(4990, 200, OpenR, OutCubic, 1.f),
 
   // recover to the resting face
-  BAS(5000, 320, Open, InOutQuad),
   BAS(5000, 320, Happy, InOutQuad),
   BAS(5000, 320, Pupil, InOutQuad),
   BAS(5000, 320, Shine, InOutQuad),
@@ -144,6 +145,7 @@ const Key kFinaleKeys[] = {
   BAS(5000, 300, MouthOpen, InOutQuad),
   BAS(5000, 500, Blush, InOutSine),
   BAS(5000, 300, Squash, InOutQuad),
+  BAS(5200, 260, Open, InOutQuad),
 
   // one last soft blink to close the show
   ABS(5500, 80, Open, InQuad, 0.f),

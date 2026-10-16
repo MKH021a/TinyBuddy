@@ -57,7 +57,7 @@ EyeLayout layoutEye(const FaceStyle& st, const FaceState& f, int i) {
   L.cy = st.eyeY + f.faceY + e.dy + gy * st.gazeShiftY + st.eyeH * 0.5f * e.scaleH * sq * 0.8f;
   // pupils stay (clipped by the rising cheek) until the "^" arch has formed, then fade out;
   // hiding them earlier flashes a solid white dome mid-transition
-  float happyHide = clampf((0.92f - e.happy) / 0.12f, 0.f, 1.f);
+  float happyHide = e.happy < 0.88f ? 1.f : 0.f;  // hard switch: a shrinking iris leaves a blob
   float ps = fminf2(L.sw, L.sh) * e.pupil * happyHide;
   L.prx = fminf2(st.pupilRx * ps, L.a - 0.5f);
   L.pry = fminf2(st.pupilRy * ps, L.b - 0.5f);
@@ -166,7 +166,8 @@ void drawEye(Canvas& c, const FaceStyle& st, const FaceState& f, int i, RenderSt
     float m = meet;
     if (cut < 1e5f) m = lerpf(meet, fminf2(meet, cut - st.seamThick * 0.5f), happyMeet);
     float lt = lerpf(m, topRest, o) + e.tilt * dx * L.inner + lidCurve * L.b * u * u * o;
-    float lb = fminf2(lerpf(m, botRest, oBot) - 0.12f * L.b * u * u * (1.f - oBot), cut);
+    // the lower lid curves a little while moving, and is straight when closed (clean seam)
+    float lb = fminf2(lerpf(m, botRest, oBot) - 0.12f * L.b * u * u * (1.f - oBot) * oBot * 4.f, cut);
     float top, bot;
     if (lb - lt < st.seamThick) {
       // lids have met: draw the closed-eye seam (a line that follows the lid shape)
@@ -244,6 +245,11 @@ void drawEye(Canvas& c, const FaceStyle& st, const FaceState& f, int i, RenderSt
   }
 
   if (C.seam || st.fill == EyeFill::Solid) return;
+  // a nearly-closed eye is drawn as a solid thick line: an iris squeezed into a thin band
+  // reads as an outlined box
+  int maxH = 0;
+  for (int k = 0; k < C.n; ++k) maxH = imax(maxH, C.bot[k] - C.top[k] + 1);
+  if (maxH < 2 * (int)(st.rim + 0.5f) + 7) return;
 
   // --- pupil -----------------------------------------------------------------
   // A lit rim always separates the pupil from the eye outline and from a lowered

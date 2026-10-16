@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TinyBuddy Face Lab</title>
+<link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <canvas id="logo" width="128" height="64" aria-hidden="true"></canvas>
+    <div>
+      <h1>TinyBuddy <span>face lab</span></h1>
+      <p class="sub">Every pixel here is rendered by the same C++ core the ESP32-C3 runs.</p>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="faces" class="on">Faces</button>
+    <button role="tab" data-tab="animate">Animate</button>
+    <button role="tab" data-tab="tune">Tune</button>
+    <button role="tab" data-tab="history">Design rounds</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ================= FACES ================= -->
+  <section id="tab-faces" class="tab on">
+    <div class="bar">
+      <div class="chips" id="exprChips" aria-label="Expression"></div>
+      <div class="bar-right">
+        <label class="tog"><input type="checkbox" id="cycle"> auto-cycle</label>
+        <label>panel <select id="tint">
+          <option value="white">white</option><option value="blue">blue</option><option value="yellow">yellow/blue</option>
+        </select></label>
+      </div>
+    </div>
+    <div class="grid6" id="faceGrid"></div>
+    <div class="callout" id="approvedBox" hidden></div>
+  </section>
+
+  <!-- ================= ANIMATE ================= -->
+  <section id="tab-animate" class="tab">
+    <div class="anim-layout">
+      <div class="stage-col">
+        <div id="stageWrap" class="stage"></div>
+        <div class="timeline" id="timeline">
+          <div class="marks" id="marks"></div>
+          <input type="range" id="scrub" min="0" max="100" value="0" step="1" aria-label="Timeline">
+        </div>
+        <div class="transport">
+          <button id="bStart" title="Start (Home)">⏮</button>
+          <button id="bPrev" title="Previous frame (←)">◀︎ 1</button>
+          <button id="bPlay" class="primary" title="Play / pause (space)">▶ Play</button>
+          <button id="bNext" title="Next frame (→)">1 ▶︎</button>
+          <label class="tog"><input type="checkbox" id="loop" checked> loop</label>
+          <span class="readout" id="readout">0 ms · frame 0</span>
+          <span class="phase" id="phase"></span>
+        </div>
+      </div>
+      <aside class="side">
+        <div class="field"><span class="lbl">Mode</span>
+          <div class="seg" id="modeSeg">
+            <button data-mode="anim" class="on">Animation</button>
+            <button data-mode="sync">All six in sync</button>
+            <button data-mode="reel">Idle + auto reel</button>
+          </div>
+        </div>
+        <div class="field" id="faceField"><span class="lbl">Face</span><div class="chips" id="animFaceChips"></div></div>
+        <div class="field" id="animField"><span class="lbl">Animation</span>
+          <select id="animSel"></select>
+          <p class="hint" id="animSummary"></p>
+        </div>
+        <div class="field row">
+          <label class="tog"><input type="checkbox" id="mirror"> mirrored variant</label>
+          <label>speed <select id="speed">
+            <option value="0.25">¼×</option><option value="0.5">½×</option><option value="1" selected>1×</option><option value="2">2×</option>
+          </select></label>
+        </div>
+        <div class="field row" id="reelField" hidden>
+          <label>seconds <input type="number" id="reelSec" value="30" min="5" max="120"></label>
+          <label>seed <input type="number" id="reelSeed" value="7" min="0"></label>
+          <button id="reelGo">Regenerate</button>
+        </div>
+        <div class="field"><span class="lbl">Export current frame</span>
+          <div class="row">
+            <button id="exp1">PNG 1× (exact)</button>
+            <button id="exp4">PNG 4× pixels</button>
+            <button id="expO">PNG OLED look</button>
+          </div>
+        </div>
+        <div class="field"><span class="lbl">True size</span>
+          <div class="truesize"><canvas id="trueCanvas" width="128" height="64"></canvas></div>
+          <p class="hint">≈ 1.3″ panel (29.4 × 14.7 mm active area, assuming a 96-dpi screen).</p>
+        </div>
+        <p class="hint keys">Keys: space play/pause · ←/→ frame · Home start</p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ================= TUNE ================= -->
+  <section id="tab-tune" class="tab">
+    <div class="bar">
+      <div class="chips" id="tuneFaceChips"></div>
+      <div class="bar-right"><button id="tuneReset">Reset tweaks</button></div>
+    </div>
+    <div class="tune-layout">
+      <div class="tune-preview" id="tunePreview"></div>
+      <div class="tune-params" id="tuneParams"></div>
+    </div>
+    <div class="field"><span class="lbl">Overrides (paste these into chat to keep them)</span>
+      <textarea id="tuneOut" rows="2" readonly></textarea>
+    </div>
+  </section>
+
+  <!-- ================= HISTORY ================= -->
+  <section id="tab-history" class="tab">
+    <p class="lead">Five visual rounds. Every round is kept (sheet, PNGs, raw bitmaps, style source snapshot) so changes can be compared or reverted.</p>
+    <div id="rounds"></div>
+  </section>
+</main>
+
+<dialog id="confirm">
+  <form method="dialog">
+    <h3 id="confirmTitle">Make this the canonical TinyBuddy face?</h3>
+    <p id="confirmText"></p>
+    <textarea id="confirmNote" rows="3" placeholder="Optional note: what you love, what to change…"></textarea>
+    <div class="row end"><button value="cancel">Cancel</button><button value="ok" class="primary">Approve</button></div>
+  </form>
+</dialog>
+
+<script src="/web/app.js"></script>
+</body>
+</html>

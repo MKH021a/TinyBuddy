@@ -174,7 +174,11 @@ void drawFx(Canvas& c, const FxList& fx) {
   for (int i = 0; i < fx.n; ++i) {
     const FxSprite& f = fx.item[i];
     const Sprite* s = spriteFor(f.kind, f.size);
-    if (s) drawSprite(c, *s, f.x, f.y, f.halo);
+    if (!s) continue;
+    // keep every effect fully on screen (a heart cut by the top edge reads as a glitch)
+    int x = imax(s->w / 2, imin(kW - 1 - (s->w - 1) / 2, f.x));
+    int y = imax(s->h / 2, imin(kH - 1 - (s->h - 1) / 2, f.y));
+    drawSprite(c, *s, x, y, f.halo);
   }
 }
 

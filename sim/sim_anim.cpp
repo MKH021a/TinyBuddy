@@ -157,7 +157,23 @@ int cmdJson(const std::vector<std::string>& a) {
     printJson(s, std::string("\"face\":\"") + st.id + "\",");
     return 0;
   }
-  fprintf(stderr, "usage: tbsim json anim <id> <face> [...] | json reel <face> <seconds> [...]\n");
+  if (a[1] == "pose" && a.size() >= 4) {  // json pose <face> <expr|rest>
+    int si = styleIndex(a[2][0]);
+    if (si < 0) return 1;
+    st = styled(si);
+    FaceState f = st.rest;
+    if (a[3] != "rest") {
+      const Expression* ex = expressionByName(a[3].c_str());
+      if (!ex) { fprintf(stderr, "unknown expression\n"); return 1; }
+      applyExpression(*ex, f);
+    }
+    uint8_t buf[kBufBytes];
+    Canvas c(buf);
+    renderFace(c, st, f, nullptr);
+    printf("{\"face\":\"%c\",\"expr\":\"%s\",\"frame\":\"%s\"}\n", st.id, a[3].c_str(), base64(buf, kBufBytes).c_str());
+    return 0;
+  }
+  fprintf(stderr, "usage: tbsim json anim <id> <face> [...] | json reel <face> <seconds> [...] | json pose <face> <expr>\n");
   return 2;
 }
 
