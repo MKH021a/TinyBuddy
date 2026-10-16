@@ -1,0 +1,461 @@
+#include "tb_render.h"
+#include "tb_ease.h"
+#include "tb_sprites.h"
+
+namespace tb {
+
+namespace {
+
+constexpr int kMaxCols = 80;  // widest possible eye (incl. widen + perspective) in columns
+
+struct EyeLayout {
+  float cx, cy, a, b;
+  float inner;          // +1: inner corner toward +x (left eye); -1 for the right eye
+  float sw, sh;         // effective scale
+  float prx, pry, px, py;
+};
+
+// Base silhouette: half height (as a fraction of b) at normalised column u in (-1, 1).
+float shapeHalf(const FaceStyle& st, float u, float a, float b) {
+  float au = u < 0 ? -u : u;
+  switch (st.shape) {
+    case EyeShape::Ellipse:
+      return sqrtf(fmaxf2(0.f, 1.f - au * au));
+    case EyeShape::Squircle: {
+      float n = st.squircleN;
+      float v = 1.f - powf(au, n);
+      return v <= 0.f ? 0.f : powf(v, 1.f / n);
+    }
+    case EyeShape::RoundRect: {
+      float r = fminf2(st.corner * fminf2(a / (st.eyeW * 0.5f), b / (st.eyeH * 0.5f)), fminf2(a, b));
+      float dx = au * a;
+      float straight = a - r;
+      if (dx <= straight) return 1.f;
+      float k = dx - straight;
+      float h = (b - r) + sqrtf(fmaxf2(0.f, r * r - k * k));
+      return h / b;
+    }
+  }
+  return 0.f;
+}
+
+EyeLayout layoutEye(const FaceStyle& st, const FaceState& f, int i) {
+  const EyeState& e = f.eye[i];
+  float side = i == 0 ? -1.f : 1.f;
+  float gx = clampf(f.gazeX, -1.2f, 1.2f);
+  float gy = clampf(f.gazeY, -1.2f, 1.2f);
+  float persp = 1.f + st.perspective * gx * side;
+  float sq = clampf(f.squash, -0.5f, 0.5f);
+  EyeLayout L;
+  L.sw = e.scaleW * (1.f + sq) * persp;
+  L.sh = e.scaleH * (1.f - sq) * (1.f + (persp - 1.f) * 0.6f);
+  L.a = st.eyeW * 0.5f * L.sw;
+  L.b = st.eyeH * 0.5f * L.sh;
+  L.inner = -side;
+  L.cx = kW * 0.5f + side * st.spacing * 0.5f * (1.f + 0.3f * sq) + f.faceX + e.dx + gx * st.gazeShiftX;
+  // squash keeps the eyes planted on their bottom edge (reads as weight)
+  L.cy = st.eyeY + f.faceY + e.dy + gy * st.gazeShiftY + st.eyeH * 0.5f * e.scaleH * sq * 0.8f;
+  // pupils fade out as the eye turns into a happy "^" arch
+  float happyHide = clampf((0.62f - e.happy) / 0.14f, 0.f, 1.f);
+  float ps = fminf2(L.sw, L.sh) * e.pupil * happyHide;
+  L.prx = fminf2(st.pupilRx * ps, L.a - 0.5f);
+  L.pry = fminf2(st.pupilRy * ps, L.b - 0.5f);
+  float lx = clampf(gx + e.lookX, -1.4f, 1.4f);
+  L.px = L.cx + lx * st.travelX * L.a;
+  L.py = L.cy + st.pupilDy * L.sh + gy * st.travelY * L.b;
+  return L;
+}
+
+// Per-column visible ranges of one eye (pixel rows, inclusive). top > bot means empty.
+struct EyeCols {
+  int x0 = 0, n = 0;
+  int8_t top[kMaxCols], bot[kMaxCols];      // visible eye
+  int8_t ptop[kMaxCols], pbot[kMaxCols];    // pupil ∩ visible
+  bool seam = false;                        // eye currently rendered as a closed line
+};
+
+inline bool inCol(const EyeCols& C, int x, int y, bool pupil) {
+  int k = x - C.x0;
+  if (k < 0 || k >= C.n) return false;
+  return pupil ? (y >= C.ptop[k] && y <= C.pbot[k]) : (y >= C.top[k] && y <= C.bot[k]);
+}
+
+void circleInPupil(Canvas& c, const EyeCols& C, float cx, float cy, float rx, float ry, Ink ink) {
+  if (rx < 0.5f || ry < 0.5f) {  // degenerate -> single pixel
+    int x = (int)floorf(cx), y = (int)floorf(cy);
+    if (inCol(C, x, y, true)) c.pixel(x, y, ink);
+    return;
+  }
+  int xa = firstPx(cx - rx), xb = lastPx(cx + rx);
+  for (int x = xa; x <= xb; ++x) {
+    float u = (x + 0.5f - cx) / rx;
+    float h = ry * sqrtf(fmaxf2(0.f, 1.f - u * u));
+    int ya = firstPx(cy - h), yb = lastPx(cy + h);
+    int k = x - C.x0;
+    if (k < 0 || k >= C.n) continue;
+    ya = imax(ya, C.ptop[k]);
+    yb = imin(yb, C.pbot[k]);
+    if (ya <= yb) c.vspan(x, ya, yb, ink);
+  }
+}
+
+void spriteInPupil(Canvas& c, const EyeCols& C, const Sprite& s, int cx, int cy) {
+  int x0 = cx - s.w / 2, y0 = cy - s.h / 2;
+  for (int y = 0; y < s.h; ++y)
+    for (int x = 0; x < s.w; ++x)
+      if (s.px[y * s.w + x] == '#' && inCol(C, x0 + x, y0 + y, true)) c.pixel(x0 + x, y0 + y, Ink::On);
+}
+
+void drawEye(Canvas& c, const FaceStyle& st, const FaceState& f, int i, RenderStats* stats) {
+  const EyeState& e = f.eye[i];
+  EyeLayout L = layoutEye(st, f, i);
+  EyeCols C;
+  int xa = imax(0, firstPx(L.cx - L.a));
+  int xb = imin(kW - 1, lastPx(L.cx + L.a));
+  if (xb - xa + 1 > kMaxCols) xb = xa + kMaxCols - 1;
+  if (xb < xa) return;
+  C.x0 = xa;
+  C.n = xb - xa + 1;
+
+  const float o = clampf(e.open, 0.f, 1.f);
+  const float oBot = ease(Ease::OutQuad, clampf(o / 0.38f, 0.f, 1.f));  // lower lid: late, small move
+  const float hp = clampf(e.happy, 0.f, 1.2f);
+  const float meet = L.cy + st.seam * L.b;
+  const float topRest = L.cy - L.b - 1.5f;
+  const float botRest = L.cy + L.b + 1.5f;
+  const float lidCurve = st.lidCurve + e.curve;
+  // happy cut: an ellipse rising from below that leaves a "^" arch
+  // happy 0..0.5  = "smiling eyes": a broad, almost flat cut lifts the lower edge
+  // happy 0.5..1  = the cut rounds off and rises into a "^" rainbow arch
+  const float h1 = clampf(hp / 0.5f, 0.f, 1.f), h2 = clampf((hp - 0.5f) / 0.5f, 0.f, 1.f);
+  const float cutRx = L.a * lerpf(2.2f, 1.18f, h2);
+  const float cutRy = L.b * lerpf(1.1f, 1.25f, h2);
+  const float cutTop = hp <= 0.5f ? lerpf(L.cy + L.b + 2.f, L.cy + 0.45f * L.b, ease(Ease::OutQuad, h1))
+                                  : lerpf(L.cy + 0.45f * L.b, L.cy - 0.36f * L.b, h2);
+  const float cutCy = cutTop + cutRy;
+  const float happyMeet = clampf(hp * 1.5f, 0.f, 1.f);
+
+  bool lidCuts[kMaxCols];
+  int seamCols = 0, visCols = 0;
+
+  for (int k = 0; k < C.n; ++k) {
+    C.top[k] = 1; C.bot[k] = 0; C.ptop[k] = 1; C.pbot[k] = 0;
+    lidCuts[k] = false;
+    float fx = xa + k + 0.5f;
+    float dx = fx - L.cx;
+    float u = dx / L.a;
+    if (u <= -1.f || u >= 1.f) continue;
+    float hh = shapeHalf(st, u, L.a, L.b) * L.b;
+    if (hh <= 0.f) continue;
+    float baseTop = L.cy - hh, baseBot = L.cy + hh;
+    float cut = 1e6f;
+    if (hp > 0.f) {
+      float cu = dx / cutRx;
+      if (cu > -1.f && cu < 1.f) cut = cutCy - cutRy * sqrtf(1.f - cu * cu);
+    }
+    // Where the lids meet. For a happy eye the lids close onto the arch itself,
+    // so a closing happy eye thins into a "^" line instead of breaking apart.
+    float m = meet;
+    if (cut < 1e5f) m = lerpf(meet, fminf2(meet, cut - st.seamThick * 0.5f), happyMeet);
+    float lt = lerpf(m, topRest, o) + e.tilt * dx * L.inner + lidCurve * L.b * u * u * o;
+    float lb = fminf2(lerpf(m, botRest, oBot) - 0.12f * L.b * u * u * (1.f - oBot), cut);
+    float top, bot;
+    if (lb - lt < st.seamThick) {
+      // lids have met: draw the closed-eye seam (a line that follows the lid shape)
+      float mid = (lt + lb) * 0.5f;
+      if (mid < baseTop - 0.6f || mid > baseBot + 0.6f) continue;
+      top = mid - st.seamThick * 0.5f;
+      bot = mid + st.seamThick * 0.5f;
+      ++seamCols;
+    } else {
+      top = fmaxf2(baseTop, lt);
+      bot = fminf2(baseBot, lb);
+    }
+    lidCuts[k] = lt > baseTop + 0.4f;
+    int ya = imax(0, firstPx(top)), yb = imin(kH - 1, lastPx(bot));
+    if (ya > yb) continue;
+    C.top[k] = (int8_t)ya;
+    C.bot[k] = (int8_t)yb;
+    ++visCols;
+  }
+  C.seam = seamCols > visCols / 2;
+
+  // --- eye body --------------------------------------------------------------
+  int firstVis = -1, lastVis = -1;
+  for (int k = 0; k < C.n; ++k)
+    if (C.top[k] <= C.bot[k]) { if (firstVis < 0) firstVis = k; lastVis = k; }
+  if (firstVis < 0) return;
+
+  const int rt = (int)(st.ringThick + 0.5f);
+  for (int k = 0; k < C.n; ++k) {
+    if (C.top[k] > C.bot[k]) continue;
+    int x = xa + k;
+    if (st.fill == EyeFill::Ring && !C.seam) {
+      bool edge = (k - firstVis) < rt || (lastVis - k) < rt;
+      if (edge || C.bot[k] - C.top[k] < 2 * rt) {
+        c.vspan(x, C.top[k], C.bot[k], Ink::On);
+      } else {
+        c.vspan(x, C.top[k], C.top[k] + rt - 1, Ink::On);
+        c.vspan(x, C.bot[k] - rt + 1, C.bot[k], Ink::On);
+      }
+    } else {
+      c.vspan(x, C.top[k], C.bot[k], Ink::On);
+    }
+  }
+  if (stats) stats->eyeColumns += visCols;
+
+  // --- lid line / lashes --------------------------------------------------------
+  if (st.lidLine == LidLine::Lid && !C.seam) {
+    for (int k = 0; k < C.n; ++k) {
+      if (C.top[k] > C.bot[k] || !lidCuts[k]) continue;
+      int y1 = C.top[k] - (int)st.lidGap - 1;
+      c.vspan(xa + k, y1 - (int)st.lidThick + 1, y1, Ink::On);
+    }
+  } else if (st.lidLine == LidLine::Lash) {
+    // bold upper lash hugging the eye, thickening toward the outer corner, ending in a wing
+    int endK = -1, endY = 0;
+    for (int k = 0; k < C.n; ++k) {
+      if (C.top[k] > C.bot[k]) continue;
+      float u = (xa + k + 0.5f - L.cx) / L.a;
+      if (u < -0.97f || u > 0.97f) continue;
+      float outer = -L.inner * u;  // +1 at the outer corner
+      float th = st.lidThick + (outer > 0.f ? outer * outer * 1.6f : 0.f);
+      int gap = C.seam ? 0 : (int)st.lidGap;
+      int y1 = C.top[k] - gap - 1;
+      int y0 = y1 - (int)(th + 0.5f) + 1;
+      c.vspan(xa + k, y0, y1, Ink::On);
+      bool isOuter = L.inner > 0 ? (endK < 0) : true;  // left eye: first col; right eye: last col
+      if (isOuter) { endK = k; endY = y0; }
+    }
+    if (endK >= 0 && st.lashFlick > 0.f) {
+      int dir = L.inner > 0 ? -1 : 1;
+      int n = (int)st.lashFlick;
+      int x = xa + endK;
+      for (int j = 1; j <= n; ++j) c.vspan(x + dir * j, endY - j, endY - j + 1, Ink::On);
+    }
+  }
+
+  if (C.seam || st.fill == EyeFill::Solid) return;
+
+  // --- pupil -----------------------------------------------------------------
+  // A lit rim always separates the pupil from the eye outline and from a lowered
+  // lid, so the eye never turns into a crescent or a bracket.
+  const int rim = (int)(st.rim + 0.5f);
+  if (st.fill == EyeFill::Pupil && L.prx >= 2.5f && L.pry >= 2.5f) {
+    for (int k = 0; k < C.n; ++k) {
+      if (C.top[k] > C.bot[k]) continue;
+      // erode the visible eye by `rim` px in every direction (square neighbourhood)
+      int lim0 = -1000, lim1 = 1000;
+      bool ok = true;
+      for (int j = k - rim; j <= k + rim && ok; ++j) {
+        if (j < 0 || j >= C.n || C.top[j] > C.bot[j]) { ok = false; break; }
+        lim0 = imax(lim0, C.top[j] + rim);
+        lim1 = imin(lim1, C.bot[j] - rim);
+      }
+      if (!ok || lim0 > lim1) continue;
+      float fx = xa + k + 0.5f;
+      float pu = (fx - L.px) / L.prx;
+      if (pu <= -1.f || pu >= 1.f) continue;
+      float ph = L.pry * sqrtf(1.f - pu * pu);
+      int ya = imax(lim0, firstPx(L.py - ph));
+      int yb = imin(lim1, lastPx(L.py + ph));
+      if (ya > yb) continue;
+      C.ptop[k] = (int8_t)ya;
+      C.pbot[k] = (int8_t)yb;
+      c.vspan(xa + k, ya, yb, Ink::Off);
+      if (st.irisDither) {
+        // soft glow in the lower iris: checkerboard, keeping a dark rim
+        float inner = (fx - L.px) / fmaxf2(1.f, L.prx - 1.5f);
+        if (inner > -1.f && inner < 1.f) {
+          int ys = imax(ya + 1, (int)(L.py + L.pry * 0.30f));
+          int ye = imin(yb - 1, lastPx(L.py + (L.pry - 1.5f) * sqrtf(1.f - inner * inner)));
+          for (int y = ys; y <= ye; ++y)
+            if (((xa + k + y) & 1) == 0) c.pixel(xa + k, y, Ink::On);
+        }
+      }
+    }
+  } else if (st.fill == EyeFill::Ring) {  // dark "bead" interior; catch-lights live inside
+    for (int k = firstVis + rt; k <= lastVis - rt; ++k) {
+      if (C.bot[k] - C.top[k] < 2 * rt) continue;
+      C.ptop[k] = (int8_t)(C.top[k] + rt);
+      C.pbot[k] = (int8_t)(C.bot[k] - rt);
+    }
+  }
+
+  // --- catch-lights ----------------------------------------------------------------
+  const float sh = clampf(e.shine, 0.f, 2.f);
+  if (sh <= 0.05f) return;
+  float rx = L.prx, ry = L.pry, hx = L.px, hy = L.py;
+  if (st.fill == EyeFill::Ring) { rx = L.a - rt; ry = L.b - rt; hx = L.cx; hy = L.cy; }
+  if (rx < 2.f) return;
+  switch (st.highlight) {
+    case Highlight::None: break;
+    case Highlight::Dots:
+      circleInPupil(c, C, hx - rx * 0.34f, hy - ry * 0.38f, rx * 0.30f * sh, rx * 0.30f * sh, Ink::On);
+      circleInPupil(c, C, hx + rx * 0.40f, hy + ry * 0.36f, rx * 0.14f * sh, rx * 0.14f * sh, Ink::On);
+      break;
+    case Highlight::Sparkle: {
+      int size = (int)(rx * 0.36f * sh + 0.5f);
+      const Sprite* s = spriteFor(FxKind::Sparkle, imin(size, 6));
+      if (s) spriteInPupil(c, C, *s, (int)floorf(hx - rx * 0.32f), (int)floorf(hy - ry * 0.34f));
+      circleInPupil(c, C, hx + rx * 0.42f, hy + ry * 0.40f, rx * 0.13f * sh, rx * 0.13f * sh, Ink::On);
+      break;
+    }
+    case Highlight::Anime:
+      circleInPupil(c, C, hx - rx * 0.30f, hy - ry * 0.40f, rx * 0.26f * sh, ry * 0.30f * sh, Ink::On);
+      circleInPupil(c, C, hx + rx * 0.38f, hy - ry * 0.02f, rx * 0.12f * sh, rx * 0.12f * sh, Ink::On);
+      break;
+  }
+}
+
+void drawBrows(Canvas& c, const FaceStyle& st, const FaceState& f) {
+  if (f.browShow < 0.5f) return;
+  for (int i = 0; i < 2; ++i) {
+    const EyeState& e = f.eye[i];
+    EyeLayout L = layoutEye(st, f, i);
+    float half = st.browLen * 0.5f * L.sw;
+    float bx = L.cx - L.inner * 1.f;
+    // brows ride on the upper lid a little, so lowered lids pull them down (and a blink doesn't)
+    float o = clampf(e.open, 0.f, 1.f);
+    float by = L.cy - L.b - st.browGap - e.brow + (1.f - o) * L.b * 0.45f;
+    float x1 = bx + L.inner * half, y1 = by + e.browTilt * half;   // inner end
+    float x2 = bx - L.inner * half, y2 = by - e.browTilt * half;   // outer end
+    const float r = 1.05f;
+    int xa = firstPx(fminf2(x1, x2) - r), xb = lastPx(fmaxf2(x1, x2) + r);
+    int ya = firstPx(fminf2(y1, y2) - r), yb = lastPx(fmaxf2(y1, y2) + r);
+    float vx = x2 - x1, vy = y2 - y1, vv = vx * vx + vy * vy;
+    for (int y = ya; y <= yb; ++y)
+      for (int x = xa; x <= xb; ++x) {
+        float qx = x + 0.5f - x1, qy = y + 0.5f - y1;
+        float t = vv > 0.f ? clampf((qx * vx + qy * vy) / vv, 0.f, 1.f) : 0.f;
+        float ddx = qx - t * vx, ddy = qy - t * vy;
+        if (ddx * ddx + ddy * ddy <= r * r) c.pixel(x, y, Ink::On);
+      }
+  }
+}
+
+// One curve of the mouth as a pixel-continuous line (no gaps on steep parts).
+void mouthLine(Canvas& c, int x, float y, float prevY, bool hasPrev, float thick) {
+  float lo = y - thick * 0.5f, hi = y + thick * 0.5f;
+  if (hasPrev) {
+    float m = (y + prevY) * 0.5f;
+    lo = fminf2(lo, m - thick * 0.5f + 0.25f);
+    hi = fmaxf2(hi, m + thick * 0.5f - 0.25f);
+  }
+  int ya = firstPx(lo), yb = lastPx(hi);
+  if (yb < ya) { ya = yb = (int)floorf(y); }
+  c.vspan(x, ya, yb, Ink::On);
+}
+
+void drawMouth(Canvas& c, const FaceStyle& st, const FaceState& f) {
+  float hw = st.mouthW * 0.5f * f.mouthW * (1.f + 0.4f * f.squash);
+  if (hw < 0.6f) return;
+  float mx = kW * 0.5f + f.faceX + f.gazeX * st.gazeShiftX * 0.7f;
+  float my = st.mouthY + f.faceY + f.mouthDY + f.gazeY * st.gazeShiftY * 0.5f;
+  float s = f.mouthCurve, o = clampf(f.mouthOpen, 0.f, 1.2f), r = clampf(f.mouthRound, 0.f, 1.f);
+  float D = st.mouthDepth, cat = f.mouthCat * st.catDepth;
+  float lw = st.mouthLine;
+  int xa = firstPx(mx - hw), xb = lastPx(mx + hw);
+  float pTop = 0, pBot = 0;
+  bool has = false;
+  for (int x = xa; x <= xb; ++x) {
+    float u = clampf((x + 0.5f - mx) / hw, -1.f, 1.f);
+    float base = my + s * (1.f - u * u) + f.mouthAsym * u + cat * fabsf(sinf(kPi * u));
+    float e = sqrtf(fmaxf2(0.f, 1.f - u * u));
+    float top = base - o * D * 0.5f * r * e;
+    float bot = base + o * D * (1.f - 0.5f * r) * e;
+    if (bot - top < lw + 0.8f || st.mouthFill == MouthFill::Solid) {
+      if (st.mouthFill == MouthFill::Solid && bot - top >= lw) {
+        c.vspan(x, firstPx(top), lastPx(bot), Ink::On);
+      } else {
+        float mid = (top + bot) * 0.5f;
+        mouthLine(c, x, mid, (pTop + pBot) * 0.5f, has, lw);
+      }
+    } else {
+      mouthLine(c, x, top, pTop, has, 1.f);
+      mouthLine(c, x, bot, pBot, has, 1.f);
+      if (f.mouthTongue > 0.05f) {
+        // tongue: a lit mound resting on the lower lip
+        float tw = hw * 0.55f * f.mouthTongue, th = (bot - top) * 0.55f * f.mouthTongue;
+        float tu = (x + 0.5f - mx) / fmaxf2(0.5f, tw);
+        if (tu > -1.f && tu < 1.f) {
+          float tt = bot - th * sqrtf(1.f - tu * tu);
+          int ya = imax(firstPx(tt), firstPx(top) + 2);
+          int yb = lastPx(bot) - 1;
+          if (ya <= yb) c.vspan(x, ya, yb, Ink::On);
+        }
+      }
+    }
+    pTop = top; pBot = bot; has = true;
+  }
+  if (st.fang > 0.f && o < 0.3f) {
+    // a tiny fang hanging from the lip, on the side the smirk rises
+    float side = f.mouthAsym >= 0.f ? -1.f : 1.f;
+    float u = 0.42f * side;
+    int fx = (int)floorf(mx + u * hw);
+    float y = my + s * (1.f - u * u) + f.mouthAsym * u + cat * fabsf(sinf(kPi * u)) + lw * 0.5f;
+    int fy = (int)floorf(y + 0.5f);
+    int n = (int)(st.fang + 0.5f);
+    for (int j = 0; j < n; ++j) c.hspan(fx - (n - 1 - j) / 2, fx + (n - 1 - j) / 2 + ((n - j) % 2 == 0 ? 1 : 0), fy + j, Ink::On);
+  }
+}
+
+void drawBlush(Canvas& c, const FaceStyle& st, const FaceState& f) {
+  if (st.blush == Blush::None || f.blush < 0.15f) return;
+  for (int i = 0; i < 2; ++i) {
+    EyeLayout L = layoutEye(st, f, i);
+    float side = i == 0 ? -1.f : 1.f;
+    int bx = (int)floorf(L.cx + side * st.blushDX);
+    // cheeks ride just under the eye, so widened or squashed eyes never cover them
+    int by = (int)floorf(fmaxf2(L.cy + L.b, st.eyeY + st.eyeH * 0.5f + f.faceY) + st.blushDY);
+    float amt = clampf(f.blush, 0.f, 1.f);
+    switch (st.blush) {
+      case Blush::Hatch: {
+        int n = (int)(amt * 3.f + 0.5f);
+        int x0 = bx - 4;
+        for (int s = 0; s < n; ++s) {
+          int sx = x0 + s * 3;
+          c.pixel(sx, by + 1, Ink::On);
+          c.pixel(sx + 1, by, Ink::On);
+          c.pixel(sx + 2, by - 1, Ink::On);
+        }
+        break;
+      }
+      case Blush::Dither: {
+        float rx = 6.5f * (0.5f + 0.5f * amt), ry = 2.6f * (0.5f + 0.5f * amt);
+        for (int y = firstPx(by - ry); y <= lastPx(by + ry); ++y)
+          for (int x = firstPx(bx - rx); x <= lastPx(bx + rx); ++x) {
+            float u = (x + 0.5f - bx) / rx, v = (y + 0.5f - by) / ry;
+            if (u * u + v * v <= 1.f && ((x + y) & 1) == 0) c.pixel(x, y, Ink::On);
+          }
+        break;
+      }
+      case Blush::Dots: {
+        int n = (int)(amt * 3.f + 0.5f);
+        for (int s = 0; s < n; ++s) c.pixel(bx - 3 + s * 3, by, Ink::On);
+        break;
+      }
+      default: break;
+    }
+  }
+}
+
+}  // namespace
+
+EyeBox eyeBox(const FaceStyle& st, const FaceState& f, int eye) {
+  EyeLayout L = layoutEye(st, f, eye);
+  return EyeBox{L.cx, L.cy, L.a, L.b};
+}
+
+void renderFace(Canvas& c, const FaceStyle& st, const FaceState& f, const FxList* fx, RenderStats* stats) {
+  c.clear();
+  drawBlush(c, st, f);
+  drawMouth(c, st, f);
+  drawBrows(c, st, f);
+  drawEye(c, st, f, 0, stats);
+  drawEye(c, st, f, 1, stats);
+  if (fx) drawFx(c, *fx);
+  if (stats) stats->litPixels = c.countLit();
+}
+
+}  // namespace tb
