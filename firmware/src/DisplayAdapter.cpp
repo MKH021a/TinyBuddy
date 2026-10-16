@@ -1,0 +1,37 @@
+#include "DisplayAdapter.h"
+
+#include <Wire.h>
+
+bool DisplayAdapter::begin(Controller c) {
+  ctrl_ = c;
+  u8g2_t* g = u8g2_.getU8g2();
+  // Both setups use U8g2's shared 128x64 full-frame buffer, so switching controllers at
+  // runtime never allocates a second framebuffer.
+  if (c == Controller::SH1106)
+    u8g2_Setup_sh1106_i2c_128x64_noname_f(g, U8G2_R0, u8x8_byte_arduino_hw_i2c, u8x8_gpio_and_delay_arduino);
+  else
+    u8g2_Setup_ssd1306_i2c_128x64_noname_f(g, U8G2_R0, u8x8_byte_arduino_hw_i2c, u8x8_gpio_and_delay_arduino);
+  u8x8_SetPin_HW_I2C(u8g2_.getU8x8(), U8X8_PIN_NONE, cfg::kScl, cfg::kSda);
+  u8g2_.setI2CAddress(cfg::kI2cAddr << 1);  // U8g2 expects the 8-bit (shifted) form
+  u8g2_.setBusClock(busHz_);
+  u8g2_.begin();  // starts Wire on the configured pins, sends the init sequence
+  ok_ = ack(cfg::kI2cAddr);
+  u8g2_.clearBuffer();
+  u8g2_.sendBuffer();
+  return ok_;
+}
+
+void DisplayAdapter::setBusHz(uint32_t hz) {
+  busHz_ = hz;
+  u8g2_.setBusClock(hz);  // applied by U8g2 at the start of every transfer
+}
+
+bool DisplayAdapter::ack(uint8_t addr) {
+  Wire.beginTransmission(addr);
+  return Wire.endTransmission() == 0;
+}
+
+int DisplayAdapter::readStatus() {
+  if (Wire.requestFrom((int)cfg::kI2cAddr, 1) != 1) return -1;
+  return Wire.read();
+}

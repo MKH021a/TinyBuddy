@@ -1,0 +1,31 @@
+// All hardware configuration lives here (overridable with -D build flags in platformio.ini).
+#pragma once
+#include <stdint.h>
+
+#ifndef TB_SDA
+#define TB_SDA 8          // ESP32-C3 Super Mini default I2C SDA (also the on-board LED pin)
+#endif
+#ifndef TB_SCL
+#define TB_SCL 9          // ESP32-C3 Super Mini default I2C SCL (also the BOOT button pin)
+#endif
+#ifndef TB_I2C_ADDR
+#define TB_I2C_ADDR 0x3C  // 7-bit address; some modules use 0x3D
+#endif
+#ifndef TB_I2C_HZ
+#define TB_I2C_HZ 400000  // 400 kHz fast-mode; try `i2c 800000` at runtime to test faster
+#endif
+#ifndef TB_DEFAULT_CONTROLLER
+#define TB_DEFAULT_CONTROLLER 1  // 0 = SSD1306, 1 = SH1106
+#endif
+
+namespace cfg {
+constexpr uint8_t kSda = TB_SDA;
+constexpr uint8_t kScl = TB_SCL;
+constexpr uint8_t kI2cAddr = TB_I2C_ADDR;
+constexpr uint32_t kI2cHz = TB_I2C_HZ;
+constexpr uint32_t kSerialBaud = 115200;
+constexpr uint32_t kFrameMs = 33;      // ~30 fps target (measured cadence is reported by `fps`)
+constexpr char kDefaultFace = 'F';     // the candidate shown at boot until you choose one
+}  // namespace cfg
+
+enum class Controller : uint8_t { SSD1306 = 0, SH1106 = 1 };

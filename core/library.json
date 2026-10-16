@@ -1,0 +1,11 @@
+{
+  "name": "TinyBuddyCore",
+  "version": "0.1.0",
+  "description": "TinyBuddy face renderer + animation engine (shared by the desktop previewer and the ESP32 firmware). No Arduino dependency, no heap.",
+  "frameworks": "*",
+  "platforms": "*",
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}
